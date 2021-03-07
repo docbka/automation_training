@@ -1,58 +1,56 @@
 package ru.learnqa.socksshop.tests;
 
+import com.github.javafaker.Faker;
 import io.restassured.RestAssured;
-import io.restassured.config.EncoderConfig;
-import io.restassured.config.RestAssuredConfig;
 import io.restassured.http.ContentType;
+import io.restassured.response.Response;
+import io.restassured.response.ValidatableResponse;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
-import ru.learnqa.socksshop.CardsPayload;
-import ru.learnqa.socksshop.UserPayload;
+import ru.learnqa.socksshop.assertions.AssertableResponse;
+import ru.learnqa.socksshop.conditions.Conditions;
+import ru.learnqa.socksshop.conditions.StatusCodeCondition;
+import ru.learnqa.socksshop.payloads.CardsPayload;
+import ru.learnqa.socksshop.payloads.UserPayload;
+import ru.learnqa.socksshop.responses.CardCreateResponse;
+import ru.learnqa.socksshop.services.CardApiService;
+import ru.learnqa.socksshop.services.UserApiService;
+
+import java.util.Locale;
+import java.util.Map;
 
 import static io.restassured.http.ContentType.JSON;
-import static org.hamcrest.Matchers.emptyString;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.core.Is.is;
 
-public class CardsTest {
+public class CardsTest extends BaseTest {
 
-    @BeforeClass
-    public void setup(){
-
-        RestAssured.baseURI="http://84.201.137.101/";
-
-    }
+    private final Faker faker = new Faker(new Locale("ru"));
 
     @Test
-    public void testCreateNewCard(){
+    public void testCreateNewCard() {
 
         UserPayload user = new UserPayload();
-        user.setUsername(RandomStringUtils.randomAlphanumeric(8));
-        user.setEmail("test@mail.gov");
-        user.setPassword("test123");
+        user.username(faker.name().username())
+                .email(faker.internet().emailAddress())
+                .password(faker.internet().password());
 
-        String userId = RestAssured.given().contentType(ContentType.JSON).log().all()
-                .body(user)
-                .when()
-                .post("register")
-                .then().log().all()
-                .extract().response().jsonPath().get("id");
+        AssertableResponse reg = UserApiService.registerUser(user);
+
+        String userId = reg.asPojo(CardCreateResponse.class).getId();
+        Map<String, String> cookieRegResp = reg.getCookies();
+
 
         CardsPayload card = new CardsPayload();
-        card.setCcv(String.valueOf((int)(Math.random()*1000)));
-        card.setExpires((1 + (int) (Math.random() * 12)) + "/" + (21 + (int) (Math.random() * 99)));
-        card.setLongNum(RandomStringUtils.randomNumeric(16));
-        card.setUserID(userId);
+        card.ccv(String.valueOf((int) (Math.random() * 1000)))
+                .expires(faker.business().creditCardExpiry())
+                .longNum(faker.business().creditCardNumber())
+                .userID(userId);
 
-        RestAssured.given().contentType(JSON).log().all()
-                .body(card)
-                .when()
-                .post("cards")
-                .then().log().all()
-                .assertThat()
-                .statusCode(200);
 
+        CardApiService.cards(card, cookieRegResp)
+                .shouldHave(Conditions.statusCode(200));
 
     }
 }
